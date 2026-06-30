@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environment
+.venv/
+venv/
+env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Project
+.kgclaw/
+.kgclaw_demo/
+.kgclaw_test*/
+.kgclaw_interactive/
+
+# Logs (generated at runtime)
+*.log
+
+# Env
+.env
+.env.local
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test
+.pytest_cache/
+htmlcov/
+.coverage

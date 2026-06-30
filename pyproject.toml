@@ -1,0 +1,44 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "kgclaw"
+version = "0.1.0"
+description = "A Harness-based CLI for ontology-driven knowledge graph construction from unstructured text"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [{name = "Yanzeng Li", email = "liyanzeng@bnu.edu.cn"}]
+maintainers = [{name = "Yanzeng Li @ BNU"}]
+requires-python = ">=3.10"
+dependencies = [
+    "openai>=1.0.0",
+    "rich>=13.0.0",
+    "pydantic>=2.0.0",
+    "pyyaml>=6.0",
+    "click>=8.0.0",
+    "httpx>=0.24.0",
+    "python-dotenv>=1.0.0",
+    "prompt_toolkit>=3.0.0",
+    "pypdf>=4.0",
+    "beautifulsoup4>=4.12",
+    "openpyxl>=3.1",
+    "lxml>=4.9",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+]
+
+[project.scripts]
+kgclaw = "kgclaw.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/lsvih/KGClaw"
+Repository = "https://github.com/lsvih/KGClaw"
+Issues = "https://github.com/lsvih/KGClaw/issues"
+
+[tool.setuptools.packages.find]
+include = ["kgclaw*"]

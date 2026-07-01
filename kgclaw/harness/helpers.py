@@ -87,7 +87,71 @@ class _HarnessHelpers:
                 if name_lower in ename_lower or ename_lower in name_lower:
                     return (entity_index[ename][0], 0.15, "substring")
 
+        # Level 5: token overlap (Jaccard ≥ 0.5)
+        name_tokens = set(name_norm.split())
+        for ename in all_names:
+            ename_tokens = set(self._normalize_name(ename).split())
+            if name_tokens and ename_tokens:
+                overlap = len(name_tokens & ename_tokens) / min(len(name_tokens), len(ename_tokens))
+                if overlap >= 0.5:
+                    return (entity_index[ename][0], 0.18, f"token_overlap({overlap:.2f})")
+
+        # Level 6: character overlap for short strings (Korean, abbreviations, etc.)
+        if len(name_norm) <= 15:
+            name_chars = set(name_norm)
+            for ename in all_names:
+                ename_norm = self._normalize_name(ename)
+                if len(ename_norm) <= 15:
+                    ename_chars = set(ename_norm)
+                    if name_chars and ename_chars:
+                        char_overlap = len(name_chars & ename_chars) / max(len(name_chars), len(ename_chars))
+                        if char_overlap >= 0.7:
+                            return (entity_index[ename][0], 0.20, f"char_overlap({char_overlap:.2f})")
+
         return (None, 0, "no_match")
+
+    @staticmethod
+    def entity_match(a: str, b: str) -> bool:
+        """Fuzzy entity name matching: token overlap ≥ 0.5, substring, or edit distance ≤ 3."""
+        if not a or not b:
+            return False
+        na = _HarnessHelpers._normalize_name(a)
+        nb = _HarnessHelpers._normalize_name(b)
+        if not na or not nb:
+            return False
+        if na == nb:
+            return True
+        if len(na) >= 2 and na in nb:
+            return True
+        if len(nb) >= 2 and nb in na:
+            return True
+        toks_a, toks_b = set(na.split()), set(nb.split())
+        if toks_a and toks_b:
+            overlap = len(toks_a & toks_b) / min(len(toks_a), len(toks_b))
+            if overlap >= 0.5:
+                return True
+        if len(na) <= 20 and len(nb) <= 20:
+            from ..utils import levenshtein_distance
+            try:
+                dist = levenshtein_distance(na, nb)
+                if dist <= 3:
+                    return True
+            except ImportError:
+                pass
+            # simple inline edit distance
+            m, n = len(na), len(nb)
+            dp = [[0] * (n + 1) for _ in range(m + 1)]
+            for i in range(m + 1):
+                dp[i][0] = i
+            for j in range(n + 1):
+                dp[0][j] = j
+            for i in range(1, m + 1):
+                for j in range(1, n + 1):
+                    dp[i][j] = min(dp[i-1][j] + 1, dp[i][j-1] + 1,
+                                   dp[i-1][j-1] + (0 if na[i-1] == nb[j-1] else 1))
+            if dp[m][n] <= 3:
+                return True
+        return False
 
     def _fuzzy_dedup_entities(self, entities: list[Entity]) -> list[Entity]:
         """Fuzzy deduplicate entities by merging similar names within the same type.

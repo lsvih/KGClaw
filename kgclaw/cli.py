@@ -230,6 +230,139 @@ ONTOLOGY_TEMPLATES = {
 - 涉及议题 (about_topic): 法案 → 议题""",
         "example_text": "H.R.649 号法案由众议员 Thompson 发起，旨在修改《儿童营养法案》。\n该法案获得了来自两党的 15 名议员联署支持。",
     },
+    # ─── Evaluation dataset presets (4-8) ───────────────────────────────────
+    "4": {
+        "name": "WebNLG (DBpedia)",
+        "template": """## Entity Types
+- Entity: Any named entity, concept, location, person, organization, number, or date
+
+## Relation Types
+- creator: The subject entity is the creator/author of the object
+- broadcastedBy: The subject entity is broadcasted or aired by the object entity
+- firstAired: The subject entity is first aired on the date specified by the object entity
+- established: The subject entity was established or created in the year specified by the object entity
+- location: The subject entity is located in the place specified by the object entity
+- municipality: The subject entity is in the municipality specified by the object entity
+- category: The subject entity belongs to the category specified by the object entity
+- country: The subject entity is located in the country specified by the object entity
+- governmentType: The subject entity has the government type specified by the object entity
+- architect: The subject entity was designed/architected by the object entity
+- owner: The subject entity is owned by the object entity
+- operator: The subject entity is operated by the object entity
+- runwayLength: The subject entity has a runway length of the object value
+- elevationAboveTheSeaLevel: The subject entity's elevation above sea level is the object value
+- populationTotal: The subject entity has a total population of the object value
+- leaderTitle: The subject entity's leader title is the object value
+- (and 143 more DBpedia relation types — see webnlg_schema.csv)""",
+        "example_text": "The Enaire operated Adolfo Suarez Madrid-Barajas Airport is based in Paracuellos de Jarama.",
+    },
+    "5": {
+        "name": "REBEL (Wikidata relations)",
+        "template": """## Entity Types
+- Entity: Any named entity, concept, location, person, organization, number, or date
+
+## Relation Types
+- country: The subject entity is located in the country specified by the object entity
+- contains administrative territorial entity: The subject contains the administrative territorial entity specified by the object
+- contains settlement: The subject contains the settlement specified by the object
+- located in the administrative territorial entity: The subject is located in the administrative territorial entity
+- date of birth: The subject was born on the date specified by the object
+- place of birth: The subject was born in the place specified by the object
+- date of death: The subject died on the date specified by the object
+- place of death: The subject died in the place specified by the object
+- start time: The subject started at the time specified by the object
+- location: The subject is located at the object
+- (and 186 more Wikidata property-based relation types — see rebel_schema.csv)""",
+        "example_text": "Spodnje Hoce is a settlement in the Municipality of Hoce-Slivnica in northeastern Slovenia.",
+    },
+    "6": {
+        "name": "Wiki-NRE (Wikidata relations)",
+        "template": """## Entity Types
+- Entity: Any named entity, concept, location, person, organization, number, or date
+
+## Relation Types
+- located in the administrative territorial entity: Subject located within an administrative area
+- country: Subject located in a country
+- director: Subject was directed by object
+- cast member: Subject includes object as a cast member
+- screenwriter: Subject was written by object
+- part of: Subject is part of object
+- located on terrain feature: Subject located on a terrain feature
+- original language of film or TV show: Subject's original language is object
+- employer: Subject is employed by object
+- place served by transport hub: Subject is served by transport hub object
+- named after: Subject is named after object
+- owned by: Subject is owned by object
+- country of citizenship: Subject has citizenship of object
+- participant in: Subject participated in object
+- place of birth: Subject was born at object
+- (and 30 more Wikidata relation types — see wiki-nre_schema.csv)""",
+        "example_text": "Lyseren is a lake in the municipalities of Enebakk in Akershus county and Spydeberg in Ostfold county, Norway.",
+    },
+    "7": {
+        "name": "SREDFM (Multilingual RE)",
+        "template": """## Entity Types
+- Concept: Abstract concept (taxon, species, etc.)
+- LOC: Geographic location
+- DATE: Date or time value
+- NUMBER: Numeric value
+- PER: Person
+- ORG: Organization or institution
+- MEDIA: Media work (film, book, album, etc.)
+- EVE: Event
+- MISC: Miscellaneous entity
+- CEL: Celestial body
+- TIME: Time duration or interval
+- DIS: Disease or medical condition
+- UNK: Unknown entity type
+
+## Relation Types
+- country: Subject is located in a country
+- located in the administrative territorial entity: Subject is in an administrative area
+- instance of: Subject is an instance of a class
+- sport: Subject is a sport
+- point in time: Subject occurred at a point in time
+- part of: Subject is part of a larger whole
+- date of birth: Subject's date of birth
+- publication date: Subject's publication date
+- inception: Subject's inception/founding date
+- cast member: Subject features object as a cast member
+- (and 190 more Wikidata property relation types)""",
+        "example_text": "Miss South Africa 2011 was held on 11 December 2011 in Sun City, South Africa.",
+    },
+    "8": {
+        "name": "KoCHET (Korean Cultural Heritage)",
+        "template": """## Entity Types
+- ARTIFACTS: Building, craft, documents, historical sites, monument, musical instrument, etc.
+- PERSON: Mythical figure, name, position
+- TERM: Color, mark, shape, technique
+- DATE: Day, duration, dynasty, geo-age, month, season, year
+- POLITICAL_LOCATION: Capital city, city, country, county, province
+- CIVILIZATION: Building type, clothing, currency, drink, food, language, law, etc.
+- MATERIAL: Bone, fiber, grass, jewelry, metal, paper, rock, wood, etc.
+- LOCATION: Space, others
+- ANIMAL: Amphibian, bird, fish, insect, mammal, reptile
+- PLANT: Flower, fruit, grass, tree
+- GEOGRAPHICAL_LOCATION: Bay, continent, island, mountain, ocean, river
+- EVENT: Activity, festival, sports, war/revolution
+
+## Relation Types (Korean text, use these EXACT relation names)
+- OriginatedIn: Subject originated in/from the object (origin/location provenance)
+- consistsOf: Subject consists of the object (composition/part-whole)
+- depicts: Subject depicts the object (representation)
+- documents: Subject documents the object
+- fallsWithin: Subject falls within the object (spatial/temporal containment)
+- hasCarriedOut: Subject has carried out the object (performer/agent of action)
+- hasCreated: Subject has created the object
+- hasDestroyed: Subject has destroyed the object
+- hasSection: Subject has the object as a section
+- hasTime: Subject has the object as its time
+- isConnectedWith: Subject is connected with the object
+- isUsedIn: Subject is used in the object
+- servedAs: Subject served as the object (function/role)
+- wears: Subject wears the object (attire/adornment)""",
+        "example_text": "1906년 4월 11일 이생원댁 노비 정금이 정생원댁 노비 결득에게 홍산군 해안면 망하리 서쌍동에 있는 논을 팔고 작성한 문서.",
+    },
 }
 
 
@@ -544,7 +677,7 @@ def config(show_key: bool):
 @click.option("--trace", is_flag=True, help="跟踪模式：所有 LLM 交互完整记录到 .kgclaw/traces/（JSONL 格式）")
 @click.option("--quiet", "-q", is_flag=True, help="静默模式：减少控制台输出")
 @click.option("--work-dir", default=".kgclaw", help="中间文件工作目录（默认 .kgclaw）")
-@click.option("--template", "-T", "template_key", default=None, help="使用内置本体模板（1=人物关系, 2=企业, 3=法律法规）")
+@click.option("--template", "-T", "template_key", default=None, help="使用内置本体模板（1=人物关系, 2=企业, 3=法律法规, 4=WebNLG, 5=REBEL, 6=Wiki-NRE, 7=SREDFM, 8=KoCHET）")
 @click.option("--strategy", "-s", "strategy", type=click.Choice(["auto", "fast", "standard", "code"]), default="auto", help="工作流策略：auto=自动选择, fast=快速合并抽取, standard=标准多阶段流水线, code=代码沙盒抽取")
 @click.option("--concurrency", "-c", "concurrency", type=int, default=None, help="最大并行 Agent 数（默认 8，范围 1-64）")
 @click.option("--chunk-size", "chunk_size_opt", type=int, default=None, help="文本分块大小（默认 4000 字符）")
@@ -600,13 +733,31 @@ def run(
 
     # 处理内置模板
     if template_key and not ontology and not ontology_file:
+        # First try numeric template keys
         tmpl = ONTOLOGY_TEMPLATES.get(template_key)
         if tmpl:
             ontology = tmpl["template"]
             console.print(f"  ONT 使用内置本体模板: [bold]{tmpl['name']}[/bold]")
             console.print(f"     提示: 你也可以用自然语言描述自己的本体", style=STYLE["dim"])
         else:
-            console.print(f"  [yellow][!]  未知模板 '{template_key}'，可用: 1=人物关系, 2=企业, 3=法律法规[/yellow]")
+            # Try dataset preset from kgclaw.presets
+            try:
+                from kgclaw.presets import get_preset
+                preset = get_preset(template_key)
+                if preset:
+                    from kgclaw.models import Ontology
+                    onto = Ontology(
+                        name=preset.name,
+                        entity_types=preset.entity_types,
+                        relation_types=preset.relation_types,
+                    )
+                    ontology = onto.to_extraction_guide()
+                    console.print(f"  ONT 使用数据集预设: [bold]{preset.display_name}[/bold]")
+                    console.print(f"     [{len(preset.entity_types)} 实体类型, {len(preset.relation_types)} 关系类型]", style=STYLE["dim"])
+            except ImportError:
+                pass
+            if not ontology:
+                console.print(f"  [yellow][!]  未知模板 '{template_key}'，可用: 1-8 或 preset 名称[/yellow]")
 
     # 验证输入
     if not ontology and not ontology_file:
@@ -618,7 +769,7 @@ def run(
                 Text(_("可以通过以下方式指定："), style="white"),
                 Text(_("  * -t 参数直接传入本体文本"), style="white"),
                 Text(_("  * -O 参数指定本体文件路径"), style="white"),
-                Text(_("  * -T 参数使用内置模板 (1=人物关系, 2=企业, 3=法律法规)"), style="white"),
+                Text(_("  * -T 参数使用内置模板 (1=人物关系, 2=企业, 3=法律法规, 4=WebNLG, 5=REBEL, 6=Wiki-NRE, 7=SREDFM, 8=KoCHET)"), style="white"),
                 Text(""),
                 Text(_("例: kgclaw run -T 1 -d examples/人物图谱/人物关系图谱原始数据.txt"), style="bright_black"),
             ),

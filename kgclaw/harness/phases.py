@@ -510,6 +510,49 @@ class _HarnessPhases:
                     group_ents = group_ents[:100]
                 group_entities.append(group_ents)
 
+            # Dynamic relation filtering: for large schemas, only include
+            # relations whose keywords appear in the group text or whose
+            # domain/range matches entity types in the group.
+            import re as _re
+            MAX_RELS_PER_GROUP = 80
+            if len(all_relation_types) > MAX_RELS_PER_GROUP:
+                # Build filtered ontology per group
+                filtered_ontology_guides = []
+                group_entity_type_names = set()
+                for gents in group_entities:
+                    for e in gents:
+                        t = (e.get("type") or "").strip()
+                        if t:
+                            group_entity_type_names.add(t)
+                for gidx, (gtext, gents) in enumerate(zip(group_texts, group_entities)):
+                    gtext_lower = gtext.lower()
+                    matched_rels = []
+                    unmatched_rels = []
+                    for rt in all_relation_types:
+                        rel_keywords = rt.name.lower().replace("_", " ").split()
+                        if any(len(kw) > 3 and kw in gtext_lower for kw in rel_keywords):
+                            matched_rels.append(rt)
+                        elif rt.domain and rt.domain in group_entity_type_names:
+                            matched_rels.append(rt)
+                        elif rt.range and rt.range in group_entity_type_names:
+                            matched_rels.append(rt)
+                        else:
+                            unmatched_rels.append(rt)
+                    rels_for_group = matched_rels[:MAX_RELS_PER_GROUP]
+                    remaining = MAX_RELS_PER_GROUP - len(rels_for_group)
+                    if remaining > 0 and unmatched_rels:
+                        rels_for_group.extend(unmatched_rels[:remaining])
+                    if rels_for_group:
+                        from ..models import Ontology as _Ontology
+                        filtered_onto = _Ontology(
+                            name=ontology.name if ontology else "",
+                            entity_types=ontology.entity_types if ontology else [],
+                            relation_types=rels_for_group,
+                        )
+                        filtered_ontology_guides.append(filtered_onto.to_extraction_guide())
+                    else:
+                        filtered_ontology_guides.append(ontology_guide)
+
             self._emit("chunk_progress", {
                 "phase": "relation_extraction",
                 "total_chunks": len(doc_groups),
@@ -546,8 +589,10 @@ class _HarnessPhases:
                 agent.on_event(lambda et, d: _emit_safe(et, d))
 
                 entities_summary = json.dumps(grp_entities, ensure_ascii=False, indent=2)
+                # Use filtered ontology guide for large schemas
+                active_guide = filtered_ontology_guides[g_idx] if (use_filtered_relations and g_idx < len(filtered_ontology_guides)) else ontology_guide
                 prompt = build_relation_extraction_prompt(
-                    ontology_guide=ontology_guide,
+                    ontology_guide=active_guide,
                     entities_summary=entities_summary,
                     texts=group_text,
                 )

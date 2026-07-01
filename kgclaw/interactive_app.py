@@ -213,7 +213,7 @@ COMMANDS_HELP = {
     "/cooccur": "切换共现图谱构建（开启/关闭）",
     "/output <path>": "设置输出文件路径",
     "/format <nt|json|jsonl>": "设置输出格式",
-    "/template <1|2|3>": "使用内置本体模板（1=人物关系, 2=企业, 3=法律法规）",
+    "/template <1-8>": "使用内置本体模板（1=人物关系, 2=企业, 3=法律法规, 4-8=评测数据集）",
     "/verbose": "切换详细消息流模式（显示 LLM 交互细节）",
     "/debug": "切换调试日志模式（全部细节写入 .kgclaw/logs/）",
     "/status": "显示当前会话状态",
@@ -724,13 +724,31 @@ def run_interactive(api_key: str, api_base: str, model: str, work_dir: str = ".k
 
                 elif cmd == "/template":
                     from .cli import ONTOLOGY_TEMPLATES
-                    if arg.strip() in ONTOLOGY_TEMPLATES:
-                        tmpl = ONTOLOGY_TEMPLATES[arg.strip()]
+                    key = arg.strip()
+                    if key in ONTOLOGY_TEMPLATES:
+                        tmpl = ONTOLOGY_TEMPLATES[key]
                         session.ontology_raw = tmpl["template"]
                         console.print(f"  [OK] 本体模板: [bold]{tmpl['name']}[/bold]", style="green")
-                        console.print(f"  [dim]提示: 输入 /run 开始构建知识图谱[/dim]")
                     else:
-                        console.print(f"  [!] 无效模板编号。可选: 1=人物关系, 2=企业, 3=法律法规", style="yellow")
+                        # Try dataset preset
+                        try:
+                            from kgclaw.presets import get_preset
+                            preset = get_preset(key)
+                            if preset:
+                                from kgclaw.models import Ontology
+                                onto = Ontology(
+                                    name=preset.name,
+                                    entity_types=preset.entity_types,
+                                    relation_types=preset.relation_types,
+                                )
+                                session.ontology_raw = onto.to_extraction_guide()
+                                console.print(f"  [OK] 数据集预设: [bold]{preset.display_name}[/bold]", style="green")
+                                console.print(f"     [{len(preset.entity_types)} 实体类型, {len(preset.relation_types)} 关系类型]", style="dim")
+                            else:
+                                console.print(f"  [!] 无效模板 '{key}'。可选: 1-8 或 preset 名称", style="yellow")
+                        except ImportError:
+                            console.print(f"  [!] 无效模板 '{key}'。可选: 1-8", style="yellow")
+                    console.print(f"  [dim]提示: 输入 /run 开始构建知识图谱[/dim]")
 
                 elif cmd == "/debug":
                     from .logger import get_logger

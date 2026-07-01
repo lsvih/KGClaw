@@ -2,6 +2,8 @@
 
 **[English](README.md) | [中文](README.zh.md)**
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21107149.svg)](https://doi.org/10.5281/zenodo.21107149)
+
 <p align="center">
   <em>基于 AI Agent Harness 的本体驱动知识图谱构建系统</em>
 </p>

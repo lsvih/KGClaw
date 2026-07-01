@@ -2,6 +2,8 @@
 
 **[English](README.md) | [中文](README.zh.md)**
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21107149.svg)](https://doi.org/10.5281/zenodo.21107149)
+
 <p align="center">
   <em>An AI Agent Harness system for ontology-driven knowledge graph construction from unstructured text</em>
 </p>

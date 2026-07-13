@@ -32,14 +32,16 @@ Three usage modes:
 - **Quality check + auto-correction**: A dedicated quality-review phase vets every entity and relation against the ontology, marks flawed items for rejection, proposes type corrections, and performs Schema Canonicalization. The final aggregation automatically applies these corrections.
 - **Session resume + intelligent incremental rebuild**: Restart KGClaw and it detects your previous session. It compares file hashes (MD5) against a stored manifest — if nothing changed, cached results are reused instantly. If files were added, modified, or deleted, it tells you exactly what changed and why a rebuild is needed.
 - **Build history + rollback**: Every `/run` is automatically committed via Git. Use `/history` to browse past builds and `/rollback <hash>` to restore any historical version. Ontology changes are tracked as separate commits.
-- **Multi-paradigm ontology building**: Choose from 5 ontology construction modes via `--ontology-mode` / `-M`:
+- **Multi-paradigm ontology building**: Choose from 6 ontology construction modes via `--ontology-mode` / `-M`:
   - `text-to-ontology` (T-O): Full text → LLM → ontology (enhanced with hierarchy-focused prompts)
   - `relation-to-ontology` (R-O): Relations-first → constrain to ontology triples
   - `ht-relation-to-ontology` (HT-R-O): Entity-ontology pairs + text → head-tail relations (best for hierarchy)
   - `affinity-clustering`: spaCy noun extraction + Affinity Propagation + LLM naming
-  - `dense-ontology` (D-O): Max density — optimized for rich hierarchy and cross-type relations
-  - `auto`: Auto-selects best mode based on data characteristics
-- **Ontology evaluation metrics**: Built-in 4-dimensional evaluation (Literal F1, Fuzzy F1, Continuous F1, Graph F1) from LLM4Onto paper. See `evaluation.py` in the project root for programmatic access.
+  - `dense-ontology` (D-O): Max density — two-stage approach optimizing Graph F1 with rich hierarchy and cross-type relations
+  - `auto`: Auto-selects best mode based on data characteristics (noun density, text length, document count)
+- **Dataset presets for evaluation**: Pre-built ontology definitions for 6 common KG evaluation datasets (WebNLG, NYT, CoNLL04, SRedFM, Rebel, Wiki-NRE). Load with `from kgclaw.presets import build_ontology; onto = build_ontology("webnlg")` — skips LLM-based ontology analysis and directly uses the dataset's own label system.
+- **Ontology evaluation metrics**: Built-in 4-dimensional evaluation (Literal F1, Fuzzy F1, Continuous F1, Graph F1) from LLM4Onto paper. See `evaluation.py` for programmatic access.
+- **Structured tracing**: Full JSONL trace writer (`.kgclaw/traces/`) records every LLM request/response, tool call, and phase transition for post-hoc debugging and analysis.
 
 ---
 
@@ -216,12 +218,31 @@ User Input (Ontology + Documents/Directory)
 
 | Mode | Description | Best For |
 |------|-------------|----------|
-| `text-to-ontology` (T-O) | Full text → LLM → ontology | General text, quick setup |
-| `relation-to-ontology` (R-O) | Relations first → ontology triples | Relation-rich text |
-| `ht-relation-to-ontology` (HT-R-O) | Entity-ontology pairs → head-tail relations | Hierarchy discovery |
-| `affinity-clustering` | spaCy nouns → AP clustering → LLM naming | Large type sets, auto-discovery |
-| `dense-ontology` (D-O) | Max density — rich hierarchy + cross-relations | Maximize Graph F1 |
-| `auto` | Auto-select based on data | Default, best general choice |
+| `text-to-ontology` (T-O) | Full text → LLM → ontology (single-stage) | General text, quick setup |
+| `relation-to-ontology` (R-O) | Relations first (2-stage: discover → cluster → ontology) | Relation-rich text |
+| `ht-relation-to-ontology` (HT-R-O) | Type lists + text → hierarchy + relations (with retry) | Hierarchy discovery, named entity lists |
+| `affinity-clustering` | spaCy nouns → Affinity Propagation → LLM naming + merge | Large type sets, auto-discovery |
+| `dense-ontology` (D-O) | Max density — 3-stage: exhaustive types → hierarchy → cross-relations | Maximize Graph F1 |
+| `auto` | Auto-select based on noun density, text length, doc count | Default, best general choice |
+
+### Dataset Presets
+
+Pre-built ontologies for 6 common KG evaluation datasets, accessible via `kgclaw.presets`:
+
+| Preset Key | Dataset | Entity Types | Relation Types |
+|------------|---------|-------------|----------------|
+| `webnlg` | WebNLG | 5 categories (Astronaut, City, etc.) | 10+ (birthPlace, location, etc.) |
+| `nyt_repo` | NYT | 6 types (Person, Location, Organization, etc.) | 24 relations |
+| `kochet` | CoNLL04 | 4 types (Location, Organization, Person, Other) | 5 relations |
+| `sredfm` | SRedFM | 11 types (ArtWork, Building, etc.) | 10 relations |
+| `rebel` | Rebel | 6 types (Person, Organization, etc.) | 10 relations |
+| `wiki_nre` | Wiki-NRE | 3 types (Q, P, O-based) | 6 relations |
+
+```python
+from kgclaw.presets import build_ontology, list_presets
+print(list_presets())  # ['kochet', 'nyt_repo', 'rebel', 'sredfm', 'webnlg', 'wiki_nre']
+ontology = build_ontology("webnlg")  # returns structured Ontology, bypasses Phase 1
+```
 
 ### Project Structure
 
@@ -239,12 +260,22 @@ kgclaw/
 ├── i18n.py                 # Internationalization (gettext-style, zh/en)
 ├── refinement.py           # KG refinement engine (ontology optimization)
 ├── git_manager.py          # Git version management for build history
-├── ontology_builder.py     # Multi-paradigm ontology builder (5 modes)
+├── ontology_builder.py     # Multi-paradigm ontology builder (6 modes, 1266 lines)
+├── tracer.py               # Structured JSONL trace writer for LLM interaction debugging
+├── utils.py                # Shared utilities (Levenshtein distance, etc.)
+├── presets/                # Dataset presets for evaluation (6 datasets)
+│   ├── __init__.py         #   Preset registry: register(), get_preset(), build_ontology()
+│   ├── webnlg.py           #   WebNLG (5 entity types, 10+ relations)
+│   ├── nyt_repo.py         #   NYT (6 entity types, 24 relations)
+│   ├── kochet.py           #   CoNLL04 (4 entity types, 5 relations)
+│   ├── sredfm.py           #   SRedFM (11 entity types, 10 relations)
+│   ├── rebel.py            #   Rebel (6 entity types, 10 relations)
+│   └── wiki_nre.py         #   Wiki-NRE (3 entity types, 6 relations)
 ├── harness/                # Orchestration engine
 │   ├── engine.py           #   Main engine + doc loading + export (uses OntologyBuilder)
 │   ├── phases.py           #   8-phase impl + Gleaning + Canonicalization
 │   ├── strategies.py       #   auto/fast/code strategies
-│   └── helpers.py          #   Chunking/dedup/fuzzy matching/Agent factory
+│   └── helpers.py          #   Chunking/dedup/fuzzy matching/Agent factory + OntologyBuilder factory
 ├── tools/                  # Tool system (13 tools)
 ├── skills/                 # Skill system (5 built-in skills)
 ├── prompts/                # Prompt templates (enhanced hierarchy + density prompts)
@@ -345,6 +376,13 @@ lxml >= 4.9             # XML parsing
 ```
 
 Pure Python, no external database dependencies.
+
+Optional dependency groups:
+```bash
+pip install -e ".[eval]"      # scikit-learn, scipy, sentence-transformers, numpy (evaluation)
+pip install -e ".[ontology]"  # scikit-learn, spacy (affinity clustering mode)
+pip install -e ".[all]"       # Everything above + dev tools
+```
 
 ---
 

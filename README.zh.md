@@ -32,14 +32,16 @@ KGClaw 是一个**类 Claude Code / OpenCode 的 Agent Harness 系统**，专门
 - **质量审核与自动修正**：独立的质检阶段会对照本体审核每条实体和关系的合理性，标记应拒绝的错误条目，提出类型修正建议，并对不匹配本体的关系做 Schema Canonicalization。最终聚合结果时自动过滤被拒绝项、应用修正建议。
 - **会话恢复 + 智能增量重建**：重新启动 KGClaw 时自动检测上次构建状态，可一键恢复。通过文档清单（MD5 哈希）对比文件变更——如果文件和本体都没变，直接复用缓存结果；如果有新增/修改/删除的文件，明确告知变更内容及重建原因。
 - **构建历史可回滚**：每次 `/run` 自动通过 Git 提交构建结果。使用 `/history` 浏览历史版本，`/rollback <hash>` 回滚到任一历史版本。本体的每次修改也会被单独追踪。
-- **多范式本体构建**：通过 `--ontology-mode` / `-M` 选择 5 种本体构建范式。参考 LLM4Onto 论文的分类法（T-O / R-O / HT-R-O），支持：
+- **多范式本体构建**：通过 `--ontology-mode` / `-M` 选择 6 种本体构建范式。参考 LLM4Onto 论文的分类法（T-O / R-O / HT-R-O），支持：
   - `text-to-ontology` (T-O)：全文本 → LLM → 本体（增强 hierarchy prompt）
-  - `relation-to-ontology` (R-O)：关系优先 → 约束生成本体三元组
-  - `ht-relation-to-ontology` (HT-R-O)：类型列表 + 文本 → 层次组织 + 关系提取
-  - `affinity-clustering`：spaCy 名词提取 + 亲和传播聚类 + LLM 命名
-  - `dense-ontology` (D-O)：两阶段密度优化
-  - `auto`：自动选择
+  - `relation-to-ontology` (R-O)：关系优先 → 两阶段约束生成本体三元组
+  - `ht-relation-to-ontology` (HT-R-O)：类型列表 + 文本 → 层次组织 + 关系提取（含失败重试）
+  - `affinity-clustering`：spaCy 名词提取 + 亲和传播聚类 + LLM 命名 + 多轮合并
+  - `dense-ontology` (D-O)：三阶段密度优化（穷举类型 → 层次组织 → 跨类型关系网络），优化 Graph F1
+  - `auto`：基于名词密度、文本长度、文档数量自动选择
+- **数据集预设**：内置 6 个常见知识图谱评测数据集的本体定义（WebNLG、NYT、CoNLL04、SRedFM、Rebel、Wiki-NRE）。通过 `from kgclaw.presets import build_ontology; onto = build_ontology("webnlg")` 加载，跳过 LLM 本体分析阶段，直接使用数据集的标签体系。
 - **本体评估指标**：内置 LLM4Onto 论文的四维评估指标（Literal F1, Fuzzy F1, Continuous F1, Graph F1），可通过 `from kgclaw.evaluation import evaluate_ontology` 编程调用。
+- **结构化追踪**：完整的 JSONL 追踪写入器（`.kgclaw/traces/`），记录每次 LLM 请求/响应、工具调用和阶段转换，支持事后调试和分析。
 
 ---
 
@@ -228,12 +230,22 @@ kgclaw/
 ├── i18n.py                 # 国际化 (gettext-style, zh/en)
 ├── refinement.py           # KG 优化引擎 (基于用户反馈的本体优化)
 ├── git_manager.py          # Git 版本管理 (构建历史追踪)
-├── ontology_builder.py     # 多范式本体构建器 (5 种模式)
+├── ontology_builder.py     # 多范式本体构建器 (6 种模式, 1266 行)
+├── tracer.py               # 结构化 JSONL 追踪写入器，用于 LLM 交互调试
+├── utils.py                # 共享工具函数 (Levenshtein 编辑距离等)
+├── presets/                # 数据集预设 (6 个评测数据集)
+│   ├── __init__.py         #   预设注册中心: register(), get_preset(), build_ontology()
+│   ├── webnlg.py           #   WebNLG (5 实体类型, 10+ 关系类型)
+│   ├── nyt_repo.py         #   NYT (6 实体类型, 24 关系类型)
+│   ├── kochet.py           #   CoNLL04 (4 实体类型, 5 关系类型)
+│   ├── sredfm.py           #   SRedFM (11 实体类型, 10 关系类型)
+│   ├── rebel.py            #   Rebel (6 实体类型, 10 关系类型)
+│   └── wiki_nre.py         #   Wiki-NRE (3 实体类型, 6 关系类型)
 ├── harness/                # 编排引擎
-│   ├── engine.py           #   主引擎 + 文档加载 + 导出
+│   ├── engine.py           #   主引擎 + 文档加载 + 导出 (使用 OntologyBuilder)
 │   ├── phases.py           #   8 阶段实现 + Gleaning + Canonicalization
 │   ├── strategies.py       #   auto/fast/code 三种策略
-│   └── helpers.py          #   分块/去重/模糊匹配/Agent 工厂
+│   └── helpers.py          #   分块/去重/模糊匹配/Agent 工厂 + OntologyBuilder 工厂
 ├── tools/                  # 工具系统 (13 个工具)
 │   ├── file_tools.py       #   read_file, write_file, list_files
 │   ├── text_tools.py       #   search_in_text, extract_text_segments, parse_json
@@ -245,9 +257,12 @@ kgclaw/
 │   └── builtins.py         #   5 个内置 Skill
 ├── prompts/                # Prompt 模板
 │   └── system_prompts.py   #   System/Task Prompt + Few-shot 生成器
-└── ui/                     # UI 共享层
-    ├── progress.py         #   加权进度回调工厂
-    └── display.py          #   结果展示工具
+├── ui/                     # UI 共享层
+│   ├── progress.py         #   加权进度回调工厂
+│   └── display.py          #   结果展示工具
+└── locales/                # 翻译文件
+    └── en/LC_MESSAGES/
+        └── kgclaw.po       # 英文翻译文件
 ```
 
 详细文档见 [ARCHITECTURE.md](docs/ARCHITECTURE.md) — 系统架构与模块参考；[TECHNICAL_OVERVIEW.md](docs/TECHNICAL_OVERVIEW.md) — 综合技术白皮书。
@@ -334,10 +349,17 @@ httpx >= 0.24.0         # HTTP 客户端
 pypdf >= 4.0            # PDF 支持
 beautifulsoup4 >= 4.12  # HTML 支持
 openpyxl >= 3.1         # Excel 支持
-lxml >= 5.0             # XML 解析
+lxml >= 4.9             # XML 解析
 ```
 
 纯 Python，无外部数据库依赖。
+
+可选依赖组：
+```bash
+pip install -e ".[eval]"      # scikit-learn, scipy, sentence-transformers, numpy (评测)
+pip install -e ".[ontology]"  # scikit-learn, spacy (亲和传播聚类模式)
+pip install -e ".[all]"       # 以上全部 + 开发工具
+```
 
 ---
 

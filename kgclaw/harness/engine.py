@@ -581,64 +581,35 @@ class Harness(_HarnessPhases, _HarnessStrategies, _HarnessHelpers):
         # ── Phase 0: Auto-discover ontology if none provided ────────────────
         if not ontology or not ontology.raw_definition:
             self._emit("phase_start", {"phase": "auto_discover_ontology"})
-            console_text = "\n".join([d.text[:3000] for d in docs[:3]])
-            discover_prompt = f"""请分析以下文档内容，自动归纳总结出合理的知识图谱本体定义。
 
-你需要：
-1. 识别文档中出现的核心实体类型
-2. 识别这些实体之间存在的关系类型
-3. 生成一个完整的、可直接用于知识抽取的本体定义
-
-## 文档内容（前 3 篇）
-{console_text[:5000]}
-
-请输出 JSON 格式的本体定义。"""
+            # Use the new OntologyBuilder for multi-paradigm support
+            onto_mode = getattr(self.config, 'ontology_mode', 'auto')
             try:
-                skill = get_skill("ontology_analyzer", self.llm_config)
-                agent_cfg = AgentConfig(
-                    name="auto_discover",
-                    system_prompt=SYSTEM_PROMPT_ONTOLOGY_ANALYZER,
-                    tools=[],
-                    max_tool_calls=1,
+                from ..ontology_builder import OntologyBuilder
+                builder = OntologyBuilder(self.llm_config, self.memory)
+                ontology = builder.build(docs, mode=onto_mode)
+                self.log.info(
+                    f"OntologyBuilder mode={onto_mode}: "
+                    f"{'success' if ontology else 'failed'}"
                 )
-                agent = Agent(agent_cfg, self.memory, self.llm_config)
-                agent.on_event(lambda et, d: self._emit(et, d))
-                result = agent.run_structured(discover_prompt, skill.get_output_schema())
-                if result:
-                    entity_types = [
-                        EntityType(name=et.get("name", ""), description=et.get("description", ""))
-                        for et in result.get("entity_types", [])
-                    ]
-                    relation_types = [
-                        RelationType(name=rt.get("name", ""), description=rt.get("description", ""),
-                                     domain=rt.get("domain"), range=rt.get("range"))
-                        for rt in result.get("relation_types", [])
-                    ]
-                    ontology = Ontology(
-                        name=result.get("ontology_name", "auto_discovered"),
-                        description=result.get("description", ""),
-                        entity_types=entity_types,
-                        relation_types=relation_types,
-                        raw_definition=result.get("extraction_guide", ""),
-                    )
-                    self.memory.workflow.ontology = ontology
-                    self.memory.save_workflow()
-                    self.memory.export_ontology()
-                    self._emit("phase_complete", {
-                        "phase": "auto_discover_ontology",
-                        "entity_types": len(entity_types),
-                        "relation_types": len(relation_types),
-                    })
-                else:
-                    self._emit("phase_failed", {
-                        "phase": "auto_discover_ontology",
-                        "error": "无法自动推断本体",
-                    })
-                    return ExtractionResult()
-            except Exception as e:
+            except ImportError as e:
+                self.log.warning(f"OntologyBuilder import failed: {e}")
+                ontology = None
+
+            if ontology and ontology.entity_types:
+                self.memory.workflow.ontology = ontology
+                self.memory.save_workflow()
+                self.memory.export_ontology()
+                self._emit("phase_complete", {
+                    "phase": "auto_discover_ontology",
+                    "mode": onto_mode,
+                    "entity_types": len(ontology.entity_types),
+                    "relation_types": len(ontology.relation_types),
+                })
+            else:
                 self._emit("phase_failed", {
                     "phase": "auto_discover_ontology",
-                    "error": str(e),
+                    "error": "无法自动推断本体",
                 })
                 return ExtractionResult()
 

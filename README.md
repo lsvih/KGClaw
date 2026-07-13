@@ -32,6 +32,14 @@ Three usage modes:
 - **Quality check + auto-correction**: A dedicated quality-review phase vets every entity and relation against the ontology, marks flawed items for rejection, proposes type corrections, and performs Schema Canonicalization. The final aggregation automatically applies these corrections.
 - **Session resume + intelligent incremental rebuild**: Restart KGClaw and it detects your previous session. It compares file hashes (MD5) against a stored manifest — if nothing changed, cached results are reused instantly. If files were added, modified, or deleted, it tells you exactly what changed and why a rebuild is needed.
 - **Build history + rollback**: Every `/run` is automatically committed via Git. Use `/history` to browse past builds and `/rollback <hash>` to restore any historical version. Ontology changes are tracked as separate commits.
+- **Multi-paradigm ontology building**: Choose from 5 ontology construction modes via `--ontology-mode` / `-M`:
+  - `text-to-ontology` (T-O): Full text → LLM → ontology (enhanced with hierarchy-focused prompts)
+  - `relation-to-ontology` (R-O): Relations-first → constrain to ontology triples
+  - `ht-relation-to-ontology` (HT-R-O): Entity-ontology pairs + text → head-tail relations (best for hierarchy)
+  - `affinity-clustering`: spaCy noun extraction + Affinity Propagation + LLM naming
+  - `dense-ontology` (D-O): Max density — optimized for rich hierarchy and cross-type relations
+  - `auto`: Auto-selects best mode based on data characteristics
+- **Ontology evaluation metrics**: Built-in 4-dimensional evaluation (Literal F1, Fuzzy F1, Continuous F1, Graph F1) from LLM4Onto paper. See `evaluation.py` in the project root for programmatic access.
 
 ---
 
@@ -204,14 +212,25 @@ User Input (Ontology + Documents/Directory)
 | `code` | Large tabular data | Agent generates Python code for sandbox execution |
 | `auto` | Uncertain | Automatically selects based on data characteristics |
 
+### Ontology Building Modes (`--ontology-mode`)
+
+| Mode | Description | Best For |
+|------|-------------|----------|
+| `text-to-ontology` (T-O) | Full text → LLM → ontology | General text, quick setup |
+| `relation-to-ontology` (R-O) | Relations first → ontology triples | Relation-rich text |
+| `ht-relation-to-ontology` (HT-R-O) | Entity-ontology pairs → head-tail relations | Hierarchy discovery |
+| `affinity-clustering` | spaCy nouns → AP clustering → LLM naming | Large type sets, auto-discovery |
+| `dense-ontology` (D-O) | Max density — rich hierarchy + cross-relations | Maximize Graph F1 |
+| `auto` | Auto-select based on data | Default, best general choice |
+
 ### Project Structure
 
 ```
 kgclaw/
 ├── agent.py                # Agent system (LLM + Tool Use + Stream + SubAgent + Circuit Breaker)
-├── cli.py                  # CLI entry (Click + Rich)
+├── cli.py                  # CLI entry (Click + Rich) — includes --ontology-mode flag
 ├── interactive_app.py      # Interactive REPL (prompt_toolkit + Live/Markdown)
-├── models.py               # Pydantic data models
+├── models.py               # Pydantic data models (incl. OntologyMode enum)
 ├── config.py               # User configuration (~/.kgclaw/config.yaml)
 ├── memory.py               # Session memory (msg compaction + workflow persistence)
 ├── logger.py               # Structured logging (RotatingFileHandler + Debug)
@@ -220,14 +239,15 @@ kgclaw/
 ├── i18n.py                 # Internationalization (gettext-style, zh/en)
 ├── refinement.py           # KG refinement engine (ontology optimization)
 ├── git_manager.py          # Git version management for build history
+├── ontology_builder.py     # Multi-paradigm ontology builder (5 modes)
 ├── harness/                # Orchestration engine
-│   ├── engine.py           #   Main engine + doc loading + export
+│   ├── engine.py           #   Main engine + doc loading + export (uses OntologyBuilder)
 │   ├── phases.py           #   8-phase impl + Gleaning + Canonicalization
 │   ├── strategies.py       #   auto/fast/code strategies
 │   └── helpers.py          #   Chunking/dedup/fuzzy matching/Agent factory
 ├── tools/                  # Tool system (13 tools)
 ├── skills/                 # Skill system (5 built-in skills)
-├── prompts/                # Prompt templates
+├── prompts/                # Prompt templates (enhanced hierarchy + density prompts)
 ├── ui/                     # Shared UI layer
 │   ├── progress.py         #   Weighted progress callback factory
 │   └── display.py          #   Result display utilities
@@ -305,7 +325,7 @@ Any OpenAI-compatible API: OpenAI / DeepSeek / Qwen / Ollama (local) / vLLM / Cu
 
 ```bash
 pip install -e ".[dev]"
-python -m pytest tests/ -v                # 198 tests, no API key required
+python -m pytest tests/ -v                # 252 tests, no API key required
 ```
 
 ### Dependencies
@@ -338,6 +358,7 @@ This project was inspired by the following excellent projects:
 - **edc** (2024) — Open extraction→standardization, Schema Canonicalization
 - **Apple ODKE+** (2025) — Production-grade ontology-guided KG extraction pipeline
 - **Microsoft GraphRAG** (2024) — Unstructured text→entities/relations→community detection
+- **LLM4Onto** (Ouyang, Tang & Huang) — "Automated Domain Ontology Construction Using Large Language Models", *Semantic Web Journal*. The T-O / R-O / HT-R-O paradigm taxonomy and four-dimensional evaluation framework (Literal F1, Fuzzy F1, Continuous F1, Graph F1) that form the theoretical foundation of KGClaw's multi-paradigm ontology builder.
 
 ---
 

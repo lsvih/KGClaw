@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "kgclaw"
-version = "0.1.0"
+version = "0.2.0"
 description = "A Harness-based CLI for ontology-driven knowledge graph construction from unstructured text"
 readme = "README.md"
 license = {text = "MIT"}
@@ -30,6 +30,24 @@ dependencies = [
 dev = [
     "pytest>=7.0.0",
     "pytest-asyncio>=0.21.0",
+]
+eval = [
+    "scikit-learn>=1.0.0",
+    "scipy>=1.7.0",
+    "sentence-transformers>=2.0.0",
+    "numpy>=1.20.0",
+]
+ontology = [
+    "scikit-learn>=1.0.0",
+    "spacy>=3.0.0",
+]
+all = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.21.0",
+    "scikit-learn>=1.0.0",
+    "scipy>=1.7.0",
+    "sentence-transformers>=2.0.0",
+    "spacy>=3.0.0",
 ]
 
 [project.scripts]

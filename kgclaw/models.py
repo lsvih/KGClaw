@@ -11,10 +11,22 @@ from __future__ import annotations
 
 from datetime import datetime
 from enum import Enum
-from typing import Any, Generic, Optional, TypeVar
+from typing import Any, Generic, Literal, Optional, TypeVar
 from uuid import uuid4
 
 from pydantic import BaseModel, Field, field_validator
+
+
+# ─── Ontology Building Mode ─────────────────────────────────────────────────
+
+class OntologyMode(str, Enum):
+    """Ontology building paradigm from LLM4Onto taxonomy."""
+    TEXT_TO_ONTOLOGY = "text-to-ontology"        # T-O: full text → LLM → ontology (KGClaw default)
+    RELATION_TO_ONTOLOGY = "relation-to-ontology"  # R-O: identify relations → constrain ontology triples
+    HT_RELATION_TO_ONTOLOGY = "ht-relation-to-ontology"  # HT-R-O: entity-ontology pairs + text → head-tail relations
+    AFFINITY_CLUSTERING = "affinity-clustering"    # AP clustering for auto entity type discovery
+    DENSE_ONTOLOGY = "dense-ontology"             # D-O: max density, optimized for Graph F1
+    AUTO = "auto"  # Auto-select best mode based on data characteristics
 
 
 # ─── IDs ────────────────────────────────────────────────────────────────────
@@ -428,6 +440,7 @@ class HarnessConfig(BaseModel):
     max_entities_in_qc: int = Field(default=500, ge=50, description="Max entities sent to quality checker")
     max_relations_in_qc: int = Field(default=500, ge=50, description="Max relations sent to quality checker")
     max_chunks: int = Field(default=200, ge=10, description="Max chunks before forced merge")
+    ontology_mode: str = Field(default="auto", description="Ontology building mode: auto, text-to-ontology, relation-to-ontology, ht-relation-to-ontology, affinity-clustering")
 
     @field_validator("output_format")
     @classmethod

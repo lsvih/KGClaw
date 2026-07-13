@@ -32,6 +32,14 @@ KGClaw 是一个**类 Claude Code / OpenCode 的 Agent Harness 系统**，专门
 - **质量审核与自动修正**：独立的质检阶段会对照本体审核每条实体和关系的合理性，标记应拒绝的错误条目，提出类型修正建议，并对不匹配本体的关系做 Schema Canonicalization。最终聚合结果时自动过滤被拒绝项、应用修正建议。
 - **会话恢复 + 智能增量重建**：重新启动 KGClaw 时自动检测上次构建状态，可一键恢复。通过文档清单（MD5 哈希）对比文件变更——如果文件和本体都没变，直接复用缓存结果；如果有新增/修改/删除的文件，明确告知变更内容及重建原因。
 - **构建历史可回滚**：每次 `/run` 自动通过 Git 提交构建结果。使用 `/history` 浏览历史版本，`/rollback <hash>` 回滚到任一历史版本。本体的每次修改也会被单独追踪。
+- **多范式本体构建**：通过 `--ontology-mode` / `-M` 选择 5 种本体构建范式。参考 LLM4Onto 论文的分类法（T-O / R-O / HT-R-O），支持：
+  - `text-to-ontology` (T-O)：全文本 → LLM → 本体（增强 hierarchy prompt）
+  - `relation-to-ontology` (R-O)：关系优先 → 约束生成本体三元组
+  - `ht-relation-to-ontology` (HT-R-O)：类型列表 + 文本 → 层次组织 + 关系提取
+  - `affinity-clustering`：spaCy 名词提取 + 亲和传播聚类 + LLM 命名
+  - `dense-ontology` (D-O)：两阶段密度优化
+  - `auto`：自动选择
+- **本体评估指标**：内置 LLM4Onto 论文的四维评估指标（Literal F1, Fuzzy F1, Continuous F1, Graph F1），可通过 `from kgclaw.evaluation import evaluate_ontology` 编程调用。
 
 ---
 
@@ -99,6 +107,7 @@ kgclaw run --debug -T 1 -d examples/人物图谱/人物关系图谱原始数据.
 | `--debug` | 调试日志写入文件 |
 | `--strategy` / `-s` | `auto` / `fast` / `standard` / `code` |
 | `--co-occurrence` / `--no-co-occurrence` | 是否构建共现图谱（默认开启） |
+| `--ontology-mode` / `-M` | 本体构建模式：auto / text-to-ontology / relation-to-ontology / ht-relation-to-ontology / affinity-clustering / dense-ontology |
 | `--work-dir` | 工作目录（默认 `.kgclaw`） |
 
 ---
@@ -208,9 +217,9 @@ kgclaw run --debug -T 1 -d examples/人物图谱/人物关系图谱原始数据.
 ```
 kgclaw/
 ├── agent.py                # Agent 系统 (LLM + Tool Use + Stream + SubAgent + 熔断)
-├── cli.py                  # CLI 入口 (Click + Rich)
+├── cli.py                  # CLI 入口 (Click + Rich) — 支持 --ontology-mode 参数
 ├── interactive_app.py      # 交互式 REPL (prompt_toolkit + Live/Markdown)
-├── models.py               # Pydantic 数据模型
+├── models.py               # Pydantic 数据模型 (含 OntologyMode 枚举)
 ├── config.py               # 用户配置管理 (~/.kgclaw/config.yaml)
 ├── memory.py               # 会话记忆 (对话压缩 + 工作流持久化 + .nt 导出)
 ├── logger.py               # 结构化日志 (RotatingFileHandler + Debug)
@@ -219,6 +228,7 @@ kgclaw/
 ├── i18n.py                 # 国际化 (gettext-style, zh/en)
 ├── refinement.py           # KG 优化引擎 (基于用户反馈的本体优化)
 ├── git_manager.py          # Git 版本管理 (构建历史追踪)
+├── ontology_builder.py     # 多范式本体构建器 (5 种模式)
 ├── harness/                # 编排引擎
 │   ├── engine.py           #   主引擎 + 文档加载 + 导出
 │   ├── phases.py           #   8 阶段实现 + Gleaning + Canonicalization
@@ -341,6 +351,7 @@ lxml >= 5.0             # XML 解析
 - **edc** (2024) — 开放抽取→标准化、Schema Canonicalization
 - **Apple ODKE+** (2025) — 生产级本体引导知识抽取流水线
 - **Microsoft GraphRAG** (2024) — 非结构化文本→实体/关系→社区检测
+- **LLM4Onto** (Ouyang, Tang & Huang) — 《Automated Domain Ontology Construction Using Large Language Models》, *Semantic Web Journal*。提出了 T-O / R-O / HT-R-O 本体构建范式分类法以及四维评估框架（Literal F1、Fuzzy F1、Continuous F1、Graph F1），是 KGClaw 多范式本体构建器的理论基础。
 
 ---
 

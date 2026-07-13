@@ -2,7 +2,7 @@
 
 > Ontology-driven knowledge graph construction with an AI Agent Harness
 >
-> Version 0.1.0 | 2024–2026
+> Version 0.2.0 | 2024–2026
 
 ---
 
@@ -66,26 +66,33 @@ KGClaw combines **Agent Harness architecture** (inspired by Claude Code and Open
 │  │  Agent   │  │  Skills  │  │  Tools   │  │  Memory  │      │
 │  │ agent.py │  │ skills/  │  │ tools/   │  │memory.py │      │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────┘      │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
+│  │Ontology  │  │  Tracer  │  │ Presets  │  │Refinement│      │
+│  │Builder   │  │tracer.py │  │ presets/ │  │refine.py │      │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘      │
 ├─────────────────────────────────────────────────────────────────┤
 │                     Foundation Layer                             │
 │  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
 │  │  Models  │  │  Config  │  │ Loaders  │  │ Sandbox  │      │
 │  │models.py │  │config.py │  │loaders.py│  │sandbox.py│      │
 │  └──────────┘  └──────────┘  └──────────┘  └──────────┘      │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐                    │
-│  │  Logger  │  │ Prompts  │  │   i18n   │                    │
-│  │logger.py │  │prompts/  │  │ i18n.py  │                    │
-│  └──────────┘  └──────────┘  └──────────┘                    │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐      │
+│  │  Logger  │  │ Prompts  │  │   i18n   │  │  Utils   │      │
+│  │logger.py │  │prompts/  │  │ i18n.py  │  │utils.py  │      │
+│  └──────────┘  └──────────┘  └──────────┘  └──────────┘      │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
 ### 2.2 Dependency Graph
 
 ```
-models, config, logger, loaders, sandbox, prompts, i18n
+models, config, logger, loaders, sandbox, prompts, i18n, utils
          │
          ▼
-   memory, tools, skills, refinement, git_manager
+   memory, tools, skills, refinement, git_manager, tracer
+         │
+         ▼
+  ontology_builder, presets
          │
          ▼
        agent
@@ -105,7 +112,7 @@ models, config, logger, loaders, sandbox, prompts, i18n
 ```
 kgclaw/
 ├── __init__.py              # Top-level public API
-├── models.py                # Pydantic data models
+├── models.py                # Pydantic data models (incl. OntologyMode enum)
 ├── config.py                # User configuration (~/.kgclaw/config.yaml)
 ├── agent.py                 # Agent system (LLM + Tool Use + Stream + SubAgent + Circuit Breaker)
 ├── memory.py                # Session memory (message compaction + workflow persistence)
@@ -115,14 +122,25 @@ kgclaw/
 ├── i18n.py                  # Internationalization (gettext-style, zh/en)
 ├── refinement.py            # KG refinement engine (ontology optimization from user feedback)
 ├── git_manager.py           # Git version management for build history
+├── ontology_builder.py      # Multi-paradigm ontology builder (6 modes, 1266 lines)
+├── tracer.py                # Structured JSONL trace writer for LLM interaction debugging
+├── utils.py                 # Shared utilities (Levenshtein distance, etc.)
 ├── cli.py                   # CLI entry point (Click + Rich + setup wizard)
 ├── interactive_app.py       # Interactive REPL (prompt_toolkit + Live/Markdown)
+├── presets/                 # Dataset presets for evaluation (6 datasets)
+│   ├── __init__.py          #   Preset registry: register(), get_preset(), build_ontology()
+│   ├── webnlg.py            #   WebNLG (5 entity types, 10+ relations)
+│   ├── nyt_repo.py          #   NYT (6 entity types, 24 relations)
+│   ├── kochet.py            #   CoNLL04 (4 entity types, 5 relations)
+│   ├── sredfm.py            #   SRedFM (11 entity types, 10 relations)
+│   ├── rebel.py             #   Rebel (6 entity types, 10 relations)
+│   └── wiki_nre.py          #   Wiki-NRE (3 entity types, 6 relations)
 ├── harness/                 # Orchestration engine
 │   ├── __init__.py
-│   ├── engine.py            #   Main engine + document loading + export
+│   ├── engine.py            #   Main engine + document loading + export (uses OntologyBuilder)
 │   ├── phases.py            #   8-phase implementation + Gleaning + Canonicalization
 │   ├── strategies.py        #   auto/fast/code strategies
-│   └── helpers.py           #   Chunking, dedup, fuzzy matching, Agent factory
+│   └── helpers.py           #   Chunking, dedup, fuzzy matching, Agent factory + OntologyBuilder factory
 ├── tools/                   # Tool system (13 tools)
 │   ├── __init__.py          #   Tool base class + registry
 │   ├── file_tools.py        #   read_file, write_file, list_files
@@ -134,7 +152,8 @@ kgclaw/
 │   ├── __init__.py          #   Skill base class + SkillRegistry
 │   └── builtins.py          #   5 built-in skills
 ├── prompts/                 # Prompt templates
-│   └── system_prompts.py    #   11 system/task prompts + few-shot generators
+│   ├── __init__.py
+│   └── system_prompts.py    #   System/task prompts + few-shot generators + ontology building prompts
 ├── ui/                      # Shared UI layer
 │   ├── __init__.py
 │   ├── progress.py          #   Weighted progress callback factory
@@ -257,6 +276,99 @@ GitManager(work_dir)
 ├── rollback(commit_hash)          # Restore to a previous version
 └── has_commits()                  # Check if any commits exist
 ```
+
+### 3.7 Ontology Builder (ontology_builder.py)
+
+Multi-paradigm ontology construction inspired by LLM4Onto (Ouyang et al., *Semantic Web Journal*). The `OntologyBuilder` class implements 6 distinct building modes:
+
+```
+OntologyBuilder(llm_config, memory)
+├── build(documents, mode="auto", existing_ontology=None) → Optional[Ontology]
+│   └── Auto-select via _auto_select_mode() based on noun density, text length, doc count
+├── _build_to()       # T-O: Text-to-Ontology (single-stage, enhanced with hierarchy prompts)
+├── _build_ro()       # R-O: Relation-to-Ontology (2-stage: relation discovery → ontology induction)
+├── _build_htro()     # HT-R-O: Head-Tail-Relation-to-Ontology (hierarchy-first with retry)
+├── _build_affinity() # Affinity Clustering (spaCy nouns → AP clustering → LLM naming → merge)
+├── _build_dense()    # D-O: Dense Ontology (3-stage for maximizing Graph F1)
+└── _result_to_ontology()  # Convert LLM output → Ontology with implicit parent inference
+```
+
+**Paradigm details:**
+
+| Mode | Stages | Key Technique | Best For |
+|------|--------|---------------|----------|
+| T-O | 1 | Enhanced hierarchy prompt + type list detection | General text |
+| R-O | 2 | Relation discovery → clustering → domain/range induction | Relation-rich text |
+| HT-R-O | 1+retry | Type list hierarchy organization with retry fallback | Named entity lists |
+| D-O | 3 | Exhaustive types (30-50) → 3-4 level hierarchy → dense cross-relations | Graph F1 optimization |
+| Affinity | 5 | spaCy nouns → AP → LLM naming → merge rounds → relation discovery | Large type sets |
+
+**Implicit parent inference:** `_result_to_ontology()` performs post-processing:
+1. Deduplicates and normalizes entity type names (Title Case)
+2. Validates parent references (clears invalid ones)
+3. Infers missing parents via suffix matching (e.g., "Lung Cancer" → parent "Cancer") and last-word matching
+
+**Affinity Clustering pipeline:**
+```
+Documents → spaCy noun extraction (NOUN + PROPN + noun chunks)
+         → TF-IDF char-wb vectorization
+         → Affinity Propagation (sklearn, damping=0.9)
+         → Filter small clusters (dynamic threshold: 1% of nouns)
+         → LLM names clusters as entity types (15 clusters per call)
+         → Multi-round LLM merge (up to 3 rounds)
+         → LLM relation discovery between types
+         → Structured Ontology object
+```
+
+### 3.8 Dataset Presets (presets/)
+
+Pre-built ontology definitions for 6 common KG evaluation datasets, allowing KGClaw to bypass Phase 1 (ontology analysis) and use the dataset's own label system directly:
+
+```
+presets/
+├── __init__.py    # DatasetPreset dataclass + registry + build_ontology()
+├── webnlg.py      # WebNLG — 5 entity types, 10+ relations
+├── nyt_repo.py    # NYT — 6 entity types, 24 relations
+├── kochet.py      # CoNLL04 — 4 entity types, 5 relations
+├── sredfm.py      # SRedFM — 11 entity types, 10 relations
+├── rebel.py       # Rebel — 6 entity types, 10 relations
+└── wiki_nre.py    # Wiki-NRE — 3 entity types, 6 relations
+```
+
+**Registry API:**
+```python
+from kgclaw.presets import register, get_preset, build_ontology, list_presets
+
+# List all available presets
+list_presets()  # → ['kochet', 'nyt_repo', 'rebel', 'sredfm', 'webnlg', 'wiki_nre']
+
+# Build a structured Ontology (bypasses Phase 1 LLM analysis)
+onto = build_ontology("webnlg")
+
+# Use with Harness
+harness.set_ontology_structured(onto)
+```
+
+Each preset is auto-registered at import time via the `register()` decorator. Sub-modules in `presets/` are auto-discovered and imported on package load.
+
+### 3.9 Trace Writer (tracer.py)
+
+Thread-safe structured JSONL trace writer for post-hoc debugging and analysis:
+
+```
+TraceWriter(work_dir=".kgclaw")
+├── start(workflow_id) → Path           # Opens trace file: build_{ts}_{wid}.jsonl
+├── llm_request(agent, model, prompt, tools)  # Full prompt + tool schemas
+├── llm_response(agent, prompt_tokens, completion_tokens, content, tool_calls)
+├── tool_call(agent, tool, args)        # Tool invocation record
+├── tool_result(agent, tool, success, data, error)
+├── phase(name, status, meta)           # Phase transition event
+├── workflow(event_type, data)          # Generic workflow event
+├── event(event_type, data)             # Generic trace event
+└── close()                             # Flush + close with elapsed time
+```
+
+Traces are written to `.kgclaw/traces/` as one JSONL line per event, flushed after every write for crash-recovery inspection. String fields are truncated at 50K characters to prevent oversized trace files.
 
 ---
 
@@ -705,3 +817,4 @@ This project was inspired by the following excellent projects:
 - **edc** (2024) — Open extraction → standardization, Schema Canonicalization
 - **Apple ODKE+** (2025) — Production-grade ontology-guided KG extraction pipeline
 - **Microsoft GraphRAG** (2024) — Unstructured text → entities/relations → community detection
+- **LLM4Onto** (Ouyang, Tang & Huang) — "Automated Domain Ontology Construction Using Large Language Models", *Semantic Web Journal*. The T-O / R-O / HT-R-O paradigm taxonomy and four-dimensional evaluation framework (Literal F1, Fuzzy F1, Continuous F1, Graph F1) that form the theoretical foundation of KGClaw's multi-paradigm ontology builder.

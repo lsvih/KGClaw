@@ -2,7 +2,7 @@
 
 > A technical whitepaper on ontology-driven knowledge graph construction with an AI Agent Harness
 >
-> Version 0.1.0 | 2024–2026
+> Version 0.2.0 | 2024–2026
 
 ---
 
@@ -15,12 +15,13 @@
 5. [Agent System Design](#5-agent-system-design)
 6. [Tool & Skill Systems](#6-tool--skill-systems)
 7. [Prompt Engineering & Multi-Source Fusion](#7-prompt-engineering--multi-source-fusion)
-8. [Interaction Modes](#8-interaction-modes)
-9. [Sandbox Execution & Safety](#9-sandbox-execution--safety)
-10. [Performance & Monitoring](#10-performance--monitoring)
-11. [Engineering Practices](#11-engineering-practices)
-12. [Acknowledgments](#12-acknowledgments)
-13. [Summary & Future Directions](#13-summary--future-directions)
+8. [Ontology Building System](#8-ontology-building-system)
+9. [Interaction Modes](#9-interaction-modes)
+10. [Sandbox Execution & Safety](#10-sandbox-execution--safety)
+11. [Performance & Monitoring](#11-performance--monitoring)
+12. [Engineering Practices](#12-engineering-practices)
+13. [Acknowledgments](#13-acknowledgments)
+14. [Summary & Future Directions](#14-summary--future-directions)
 
 ---
 
@@ -32,10 +33,12 @@ KGClaw is an **LLM-powered Agent Harness system for ontology-driven knowledge gr
 
 | Metric | Value |
 |--------|-------|
-| Source files | 28 Python modules |
+| Source files | 34+ Python modules |
 | Built-in tools | 13 (file, text, validation, agent, extraction) |
 | Built-in skills | 5 (ontology analysis, entity extraction, relation extraction, quality check, triple construction) |
 | Pipeline phases | 8 (including optional agent code extraction and co-occurrence graph) |
+| Ontology building modes | 6 (T-O, R-O, HT-R-O, affinity-clustering, dense-ontology, auto) |
+| Dataset presets | 6 (WebNLG, NYT, CoNLL04, SRedFM, Rebel, Wiki-NRE) |
 | File formats | 10+ (txt, md, jsonl, docx, pdf, html, csv, tsv, xlsx, xls) |
 | Built-in ontology templates | 3 (character relations, enterprise, legislation) |
 | LLM backends | Any OpenAI-compatible API |
@@ -102,10 +105,13 @@ KGClaw is organized into four layers:
 │  Skills (5 built-in + custom discovery)                       │
 │  Tools (13 built-in, 5 categories)                            │
 │  Memory (conversation + workflow + context compaction)        │
+│  OntologyBuilder (6 modes) │ Presets (6 datasets)             │
+│  Tracer (JSONL trace writer)                                  │
 ├──────────────────────────────────────────────────────────────┤
 │                    Foundation Layer                           │
 │  Models (Pydantic) │ Config (YAML + env) │ Loaders (10+ formats) │
 │  Sandbox (subprocess + AST audit) │ Logger │ Prompts │ i18n   │
+│  Utils (Levenshtein, etc.)                                    │
 └──────────────────────────────────────────────────────────────┘
 ```
 
@@ -394,7 +400,88 @@ First-round extracted entities: [{name: "Entity A", type: "Person"}, ...]
 
 ---
 
-## 8. Interaction Modes
+## 8. Ontology Building System
+
+### 8.1 Multi-Paradigm Ontology Builder
+
+KGClaw implements a `OntologyBuilder` class (`kgclaw/ontology_builder.py`, 1266 lines) that provides 6 distinct ontology construction paradigms inspired by the LLM4Onto taxonomy (Ouyang, Tang & Huang, *Semantic Web Journal*):
+
+| Paradigm | Mode Key | Stages | Description |
+|----------|----------|--------|-------------|
+| **T-O** | `text-to-ontology` | 1 | Full text → LLM → structured ontology. Enhanced with type-list detection and hierarchy-focused prompts. |
+| **R-O** | `relation-to-ontology` | 2 | Stage 1: relation discovery from text. Stage 2: cluster relations → induce entity types → build ontology with domain/range. Falls back to T-O if < 2 relations found. |
+| **HT-R-O** | `ht-relation-to-ontology` | 1+retry | Detects input type (type list vs. raw text). First pass builds hierarchy with parent fields. If < 3 entity types produced, retries with broader prompt emphasizing naming pattern analysis. |
+| **D-O** | `dense-ontology` | 3 | Stage 1: exhaustive type extraction (30-50 candidates). Stage 2: 3-4 level hierarchy with parent fields + 8-15 cross-type relations. Targets maximum Graph F1. |
+| **Affinity** | `affinity-clustering` | 5 | spaCy noun extraction → TF-IDF char-wb vectorization → Affinity Propagation (sklearn) → LLM cluster naming (15/cluster batch) → multi-round LLM merge (up to 3) → LLM relation discovery. Falls back to T-O if < 10 nouns extracted or < 2 clusters formed. |
+| **Auto** | `auto` | — | Heuristic selection based on noun density (> 5 → affinity), avg text length (> 10K + ≤ 3 docs → HT-R-O, > 3K → R-O), single short doc → T-O. |
+
+**Shared infrastructure:**
+- `_create_agent(name, system_prompt)`: Lightweight agent factory with no tools, single tool-call cap
+- `_result_to_ontology(result, paradigm)`: LLM output → `Ontology` object with:
+  - Entity type name normalization (Title Case, whitespace cleanup)
+  - Deduplication by name
+  - Parent reference validation (clears invalid parents)
+  - **Implicit parent inference**:
+    - Suffix matching: "Lung Cancer" → parent "Cancer" (if "Cancer" exists in entity types)
+    - Last-word matching: "Business Organization" → parent "Organization"
+
+**Affinity Clustering detailed pipeline:**
+```
+Documents
+  → spaCy noun extraction (NOUN + PROPN + noun chunks, dedup)
+  → TF-IDF char-wb vectorization (ngram_range=(2,4), max_features=1000)
+  → Affinity Propagation (damping=0.9, convergence_iter=30, random_state=42)
+  → Filter clusters (min size = max(2, 1% of total nouns))
+  → Top 30 largest clusters kept
+  → LLM names clusters (batches of 15, with {name, description, parent})
+  → Multi-round LLM merge (up to 3 rounds, merges similar-named clusters)
+  → LLM relation discovery between named types
+  → Structured Ontology with entity_types + relation_types
+```
+
+### 8.2 Dataset Presets
+
+The `kgclaw.presets` package provides pre-built `Ontology` objects for 6 common knowledge graph evaluation datasets:
+
+```
+presets/
+├── __init__.py     # DatasetPreset dataclass, registry, build_ontology()
+├── webnlg.py       # WebNLG (RDF-to-text benchmark)
+├── nyt_repo.py     # NYT (New York Times relation extraction)
+├── kochet.py       # CoNLL04 (named entity + relation)
+├── sredfm.py       # SRedFM (sentence-level relation extraction)
+├── rebel.py        # Rebel (relation extraction by end-to-end BERT)
+└── wiki_nre.py     # Wiki-NRE (Wikipedia relation extraction)
+```
+
+**Key design decisions:**
+- Each preset is a `DatasetPreset` dataclass with `entity_types`, `relation_types`, language, and entity naming convention
+- Auto-registered via `register()` decorator at module import time
+- `build_ontology(name)` returns a fully-structured `Ontology` with `is_structured == True`
+- `Harness.set_ontology_structured(ontology)` bypasses Phase 1 (LLM ontology analysis), using the dataset's own label system directly
+- Sub-modules are auto-discovered and imported on `import kgclaw.presets`
+
+### 8.3 Structured Trace Writer
+
+The `TraceWriter` class (`kgclaw/tracer.py`) provides thread-safe JSONL tracing for debugging and analysis:
+
+```
+.kgclaw/traces/
+└── build_20260713T143052_abc123def456.jsonl
+```
+
+Each line is a JSON event with timestamp and event type. Events tracked:
+- `trace_start` / `trace_end`: Workflow lifecycle with elapsed time
+- `llm_request` / `llm_response`: Full prompt (prompt_chars + full text) and response (token counts + content)
+- `tool_call` / `tool_result`: Tool name, arguments, success/failure, output data
+- `phase`: Phase transitions (start/complete/failed) with metadata
+- `workflow_*`: Custom workflow events
+
+All string fields are safely serialized and truncated at 50K characters. Files are flushed after every write for crash-recovery inspection. The tracer is thread-safe (threading.Lock on all writes).
+
+---
+
+## 9. Interaction Modes
 
 ### 8.1 CLI Mode
 
@@ -471,7 +558,7 @@ stop()
 
 ---
 
-## 9. Sandbox Execution & Safety
+## 10. Sandbox Execution & Safety
 
 ### 9.1 Architecture
 
@@ -507,7 +594,7 @@ Agent-generated code → AST safety audit → subprocess execution (30s timeout)
 
 ---
 
-## 10. Performance & Monitoring
+## 11. Performance & Monitoring
 
 ### 10.1 Weighted Progress Bar
 
@@ -542,7 +629,7 @@ The logger uses Python's `RotatingFileHandler` with 3-backup rotation. In debug 
 
 ---
 
-## 11. Engineering Practices
+## 12. Engineering Practices
 
 ### 11.1 Technology Stack
 
@@ -575,7 +662,7 @@ KGClaw uses `ThreadPoolExecutor` for I/O-bound parallelism (LLM API calls). The 
 
 ---
 
-## 12. Acknowledgments
+## 13. Acknowledgments
 
 This project was inspired by the following excellent projects:
 
@@ -587,26 +674,29 @@ This project was inspired by the following excellent projects:
 | **edc** | 2024 | Open-to-canonical two-stage strategy, Schema Canonicalization, multi-choice mapping |
 | **Apple ODKE+** | 2025 | Production-grade ontology-guided KG extraction pipeline, quality review mechanisms |
 | **Microsoft GraphRAG** | 2024 | Unstructured text → entities/relations → community detection paradigm |
+| **LLM4Onto** (Ouyang, Tang & Huang) | *Semantic Web Journal* | T-O / R-O / HT-R-O paradigm taxonomy, four-dimensional evaluation framework (Literal F1, Fuzzy F1, Continuous F1, Graph F1) — theoretical foundation of KGClaw's multi-paradigm ontology builder |
 
 ---
 
-## 13. Summary & Future Directions
+## 14. Summary & Future Directions
 
-### 13.1 Current Capabilities
+### 14.1 Current Capabilities
 
 KGClaw delivers end-to-end automation from unstructured text to structured knowledge graphs:
 
 1. **Natural language ontology**: Users define ontologies conversationally. The system parses, structures, and applies them throughout the pipeline.
-2. **Zero-ontology auto-discovery**: When no ontology is provided, the system induces one from the documents.
-3. **Iterative refinement**: Users provide natural language feedback; the system analyzes results, proposes concrete changes, and applies them with one click.
-4. **Adaptive strategy**: Automatic selection of the optimal extraction strategy based on data characteristics.
-5. **Parallel extraction**: ThreadPool parallel chunked processing with linear speedup for large document collections.
-6. **Quality assurance**: Gleaning second pass + Schema Canonicalization + 4-level fuzzy matching + domain/range enforcement.
-7. **Smart incremental rebuild**: Session resume with MD5-based file change detection. When nothing changed, cached results are reused instantly. When files or ontology changed, the system reports exactly what changed and why a rebuild is needed.
-8. **Engineering completeness**: Circuit breaker, weighted progress bar, structured logging, session persistence, graceful KeyboardInterrupt handling, Git version management with rollback.
-9. **Flexible usage**: CLI / Interactive REPL / Python API.
+2. **Zero-ontology auto-discovery**: When no ontology is provided, the system induces one from the documents using any of 6 building modes.
+3. **Multi-paradigm ontology building**: 6 distinct ontology construction paradigms (T-O, R-O, HT-R-O, D-O, Affinity Clustering, Auto) inspired by LLM4Onto, with spaCy noun extraction, Affinity Propagation clustering, LLM-driven cluster naming, and multi-round merge.
+4. **Dataset presets**: 6 pre-built ontology definitions for common KG evaluation datasets (WebNLG, NYT, CoNLL04, SRedFM, Rebel, Wiki-NRE) that bypass LLM-based analysis.
+5. **Iterative refinement**: Users provide natural language feedback; the system analyzes results, proposes concrete changes, and applies them with one click.
+6. **Adaptive strategy**: Automatic selection of the optimal extraction strategy based on data characteristics.
+7. **Parallel extraction**: ThreadPool parallel chunked processing with linear speedup for large document collections.
+8. **Quality assurance**: Gleaning second pass + Schema Canonicalization + 4-level fuzzy matching + domain/range enforcement.
+9. **Smart incremental rebuild**: Session resume with MD5-based file change detection. When nothing changed, cached results are reused instantly. When files or ontology changed, the system reports exactly what changed and why a rebuild is needed.
+10. **Engineering completeness**: Circuit breaker, weighted progress bar, structured logging, session persistence, graceful KeyboardInterrupt handling, Git version management with rollback, structured JSONL tracing for debugging.
+11. **Flexible usage**: CLI / Interactive REPL / Python API.
 
-### 13.2 Future Directions
+### 14.2 Future Directions
 
 - **Graph database integration**: Direct writes to gStore / Neo4j / TuGraph for large-scale graph queries.
 - **Multi-modal support**: Entity recognition from images (OCR + vision models), enhanced table semantic understanding.

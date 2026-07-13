@@ -682,6 +682,11 @@ def config(show_key: bool):
 @click.option("--concurrency", "-c", "concurrency", type=int, default=None, help="最大并行 Agent 数（默认 8，范围 1-64）")
 @click.option("--chunk-size", "chunk_size_opt", type=int, default=None, help="文本分块大小（默认 4000 字符）")
 @click.option("--co-occurrence/--no-co-occurrence", default=True, help="是否构建共现图谱（默认开启）")
+@click.option("--ontology-mode", "-M", "ontology_mode",
+              type=click.Choice(["auto", "text-to-ontology", "relation-to-ontology",
+                                 "ht-relation-to-ontology", "affinity-clustering"]),
+              default="auto",
+              help="本体构建模式：auto=自动选择, text-to-ontology=T-O模式, relation-to-ontology=R-O模式, ht-relation-to-ontology=HT-R-O模式, affinity-clustering=亲和传播聚类模式")
 @click.option("--resume", is_flag=True, help="继续之前中断的构建会话")
 @click.option("--force", "force_run", is_flag=True, help="强制重建，跳过变更检测（与 --resume 配合使用）")
 def run(
@@ -704,6 +709,7 @@ def run(
     concurrency: Optional[int] = None,
     chunk_size_opt: Optional[int] = None,
     co_occurrence: bool = True,
+    ontology_mode: str = "auto",
     resume: bool = False,
     force_run: bool = False,
 ):
@@ -839,6 +845,7 @@ def run(
         work_dir=work_dir,
         max_concurrent_agents=concurrency if concurrency else 8,
         chunk_size=chunk_size_opt if chunk_size_opt else 4000,
+        ontology_mode=ontology_mode,
     )
 
     harness = Harness(config)
@@ -944,6 +951,14 @@ def run(
             preview = ontology_raw.replace('\n', ' ')[:80]
             summary = f"{preview}..."
         info_table.add_row(f"{ICON['onto']} 本体", summary)
+    if ontology_mode and ontology_mode != "auto":
+        mode_labels = {
+            "text-to-ontology": "T-O (文本→本体)",
+            "relation-to-ontology": "R-O (关系→本体)",
+            "ht-relation-to-ontology": "HT-R-O (头尾关系→本体)",
+            "affinity-clustering": "AP聚类 (亲和传播)",
+        }
+        info_table.add_row(f"{ICON['onto']} 本体模式", mode_labels.get(ontology_mode, ontology_mode))
     console.print(info_table)
 
     # 执行

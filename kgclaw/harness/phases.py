@@ -515,9 +515,12 @@ class _HarnessPhases:
             # domain/range matches entity types in the group.
             import re as _re
             MAX_RELS_PER_GROUP = 80
+            all_relation_types = list(ontology.relation_types) if ontology and ontology.relation_types else []
+            use_filtered_relations = False
+            filtered_ontology_guides = []
             if len(all_relation_types) > MAX_RELS_PER_GROUP:
+                use_filtered_relations = True
                 # Build filtered ontology per group
-                filtered_ontology_guides = []
                 group_entity_type_names = set()
                 for gents in group_entities:
                     for e in gents:
